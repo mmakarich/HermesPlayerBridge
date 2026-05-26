@@ -18,16 +18,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install SDK
+      - name: Install SDK components
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Build
-        run: chmod +x gradlew && ./gradlew assembleRelease
+      - name: Build release APK
+        run: ./gradlew assembleRelease
 
       - name: Sign with debug key
         run: |
@@ -38,7 +41,7 @@ jobs:
           jarsigner -keystore debug.keystore -storepass android -keypass android \
             app/build/outputs/apk/release/app-release-unsigned.apk debug
 
-      - name: Align
+      - name: Align APK
         run: |
           $ANDROID_SDK_ROOT/build-tools/34.0.0/zipalign -f -v 4 \
             app/build/outputs/apk/release/app-release-unsigned.apk \
