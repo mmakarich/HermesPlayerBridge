@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hermes Player</string>
+    <string name="channel_sync_name">Health Sync</string>
+    <string name="channel_sync_desc">Background health data synchronization</string>
+    <string name="sync_notification_title">Hermes Player</string>
+    <string name="sync_notification_text">Syncing health data…</string>
+    <string name="btn_manual_sync">Manual Sync Now</string>
+    <string name="btn_grant_permissions">Grant Health Permissions</string>
+    <string name="lbl_connection_status">Connection</string>
+    <string name="lbl_last_sync">Last Sync</string>
+    <string name="lbl_log">Sync Log</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="never_synced">Never</string>
+</resources>
