@@ -30,7 +30,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        run: gradle assembleRelease
 
       - name: Sign with debug key
         run: |
