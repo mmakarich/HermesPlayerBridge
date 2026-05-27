@@ -1,20 +1,19 @@
 package com.hermes.playerbridge
 
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.health.connect.client.permission.HealthPermission
 import androidx.lifecycle.lifecycleScope
 import com.hermes.playerbridge.data.AppDatabase
 import com.hermes.playerbridge.data.entities.SyncLogEntity
 import com.hermes.playerbridge.ui.StatusScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -29,10 +28,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var settings: SettingsManager
     private lateinit var db: AppDatabase
 
-    // Permission launcher (no longer used directly — Health Connect uses intent)
-    private var permissionLauncher: ActivityResultLauncher<Intent>? = null
+    private var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Set<HealthPermission>>? = null
 
-    // State
     private val _isSyncing = MutableStateFlow(false)
     private val _logEntries = MutableStateFlow<List<SyncLogEntity>>(emptyList())
     private val _permissionsGranted = MutableStateFlow(false)
@@ -47,24 +44,22 @@ class MainActivity : ComponentActivity() {
         db = AppDatabase.getInstance(this)
 
         // Register Health Connect permission launcher
-        permissionLauncher = registerForActivityResult(
-            ActivityResultContracts.StartIntentSenderForResult()
-        ) { result ->
-            if (result.resultCode == RESULT_OK) {
-                Log.i(TAG, "Permissions granted from Health Connect UI")
-                refreshState()
-            } else {
-                Log.w(TAG, "Permissions not granted by user")
+        try {
+            permissionLauncher = registerForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { granted ->
+                _permissionsGranted.value = granted.all { it.value }
+                Log.i(TAG, "Permissions: $granted")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register permission launcher", e)
         }
 
-        // Refresh permissions & start polling logs
         lifecycleScope.launch {
             refreshState()
             pollLogs()
         }
 
-        // Auto-start foreground service if enabled
         if (settings.autoSyncEnabled) {
             SyncService.start(this)
         }
@@ -107,30 +102,23 @@ class MainActivity : ComponentActivity() {
     private suspend fun pollLogs() {
         while (true) {
             _logEntries.value = db.syncLogDao().getRecent()
-            delay(3000) // refresh every 3s
+            delay(3000)
         }
     }
 
     private fun grantPermissions() {
         lifecycleScope.launch {
             try {
-                val intent = healthManager.getPermissionIntent()
-                if (intent != null) {
-                    // Health Connect uses ActivityResultContracts.StartIntentSenderForResult
-                    permissionLauncher?.launch(
-                        Intent(Intent.ACTION_VIEW).apply {
-                            // This is the correct way to launch Health Connect permission screen
-                            setClassName(
-                                "com.google.android.apps.healthdata",
-                                "com.google.android.apps.healthdata.permission.OnboardingActivity"
-                            )
-                            putExtra("Permissions", healthManager.REQUIRED_PERMISSIONS.toTypedArray())
-                        }
-                    )
+                val client = healthManager.getClient()
+                if (client != null) {
+                    // Open Health Connect permissions screen
+                    val intent = Intent("androidx.health.connect.action.REQUEST_PERMISSIONS")
+                        .setPackage("com.google.android.apps.healthdata")
+                        .putExtra("PERMISSIONS", HealthConnectManager.REQUIRED_PERMISSIONS.toTypedArray())
+                    startActivity(intent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to launch permission intent", e)
-                // Fallback: open Health Connect app
                 try {
                     val intent = packageManager.getLaunchIntentForPackage("com.google.android.apps.healthdata")
                     if (intent != null) startActivity(intent)
@@ -145,7 +133,6 @@ class MainActivity : ComponentActivity() {
         if (_isSyncing.value) return
         _isSyncing.value = true
 
-        // Insert a pending log entry
         lifecycleScope.launch {
             db.syncLogDao().insert(
                 SyncLogEntity(
@@ -155,10 +142,8 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // Enqueue one-shot sync worker
         SyncWorker.enqueueOneShot(this)
 
-        // After a delay, refresh
         lifecycleScope.launch {
             delay(5000)
             _isSyncing.value = false

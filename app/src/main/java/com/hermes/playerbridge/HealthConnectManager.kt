@@ -41,20 +41,17 @@ class HealthConnectManager(private val context: Context) {
 
     fun isAvailable(): Boolean = healthClient != null
 
-    suspend fun getGrantedPermissions(): Set<String> {
-        return try {
-            healthClient?.permissionController?.getGrantedPermissions() ?: emptySet()
-        } catch (e: Exception) {
-            emptySet()
-        }
-    }
+    fun getClient() = healthClient
 
     suspend fun areAllPermissionsGranted(): Boolean {
-        val granted = getGrantedPermissions()
-        return REQUIRED_PERMISSIONS.all { it in granted }
+        val client = healthClient ?: return false
+        return try {
+            val granted = client.permissionController.getGrantedPermissions()
+            REQUIRED_PERMISSIONS.all { it in granted }
+        } catch (e: Exception) {
+            false
+        }
     }
-
-    fun getPermissionIntent() = healthClient?.permissionController?.getPermissionIntent(REQUIRED_PERMISSIONS)
 
     suspend fun readDailyAggregate(date: LocalDate): AggregationResult? {
         val client = healthClient ?: return null
