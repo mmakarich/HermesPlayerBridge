@@ -6,20 +6,16 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
-import androidx.health.connect.client.request.AggregateGroupRequest
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.*
 import java.time.temporal.ChronoUnit
-import java.util.*
 
 class HealthConnectManager(private val context: Context) {
 
     companion object {
         private const val TAG = "HealthConnect"
-        const val AGGREGATION_PERIOD_DAYS = 1  // daily summaries
-
-        // All permissions we request
         val REQUIRED_PERMISSIONS = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),
@@ -30,7 +26,6 @@ class HealthConnectManager(private val context: Context) {
             HealthPermission.getReadPermission(DistanceRecord::class),
             HealthPermission.getReadPermission(WeightRecord::class),
             HealthPermission.getReadPermission(BodyFatRecord::class),
-            HealthPermission.getReadPermission(StressRecord::class),
             HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         )
     }
@@ -50,7 +45,6 @@ class HealthConnectManager(private val context: Context) {
         return try {
             healthClient?.permissionController?.getGrantedPermissions() ?: emptySet()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get permissions", e)
             emptySet()
         }
     }
@@ -60,18 +54,13 @@ class HealthConnectManager(private val context: Context) {
         return REQUIRED_PERMISSIONS.all { it in granted }
     }
 
-    /** Returns the intent to launch the Health Connect permissions screen. */
     fun getPermissionIntent() = healthClient?.permissionController?.getPermissionIntent(REQUIRED_PERMISSIONS)
 
-    // ── Data queries ─────────────────────────────────────────
-
-    /** Aggregate daily stats: steps, calories, distance, heart rate. */
     suspend fun readDailyAggregate(date: LocalDate): AggregationResult? {
         val client = healthClient ?: return null
         val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
         val end = start.plus(1, ChronoUnit.DAYS)
-
-        val request = AggregateGroupRequest(
+        val request = AggregateRequest(
             metrics = setOf(
                 StepsRecord.COUNT_TOTAL,
                 TotalCaloriesBurnedRecord.CALORIES_TOTAL,
@@ -85,12 +74,11 @@ class HealthConnectManager(private val context: Context) {
         return try {
             client.aggregate(request)
         } catch (e: Exception) {
-            Log.e(TAG, "Aggregate failed for $date", e)
+            Log.e(TAG, "Aggregate failed", e)
             null
         }
     }
 
-    /** Read HRV records for a time range. */
     suspend fun readHrv(start: Instant, end: Instant): List<HeartRateVariabilityRmssdRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -101,12 +89,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read HRV", e)
             emptyList()
         }
     }
 
-    /** Read SpO2 records for a time range. */
     suspend fun readSpo2(start: Instant, end: Instant): List<OxygenSaturationRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -117,12 +103,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read SpO2", e)
             emptyList()
         }
     }
 
-    /** Read weight records for a time range. */
     suspend fun readWeight(start: Instant, end: Instant): List<WeightRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -133,12 +117,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read weight", e)
             emptyList()
         }
     }
 
-    /** Read body fat records. */
     suspend fun readBodyFat(start: Instant, end: Instant): List<BodyFatRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -149,28 +131,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read body fat", e)
             emptyList()
         }
     }
 
-    /** Read stress records. */
-    suspend fun readStress(start: Instant, end: Instant): List<StressRecord> {
-        val client = healthClient ?: return emptyList()
-        return try {
-            client.readRecords(
-                ReadRecordsRequest(
-                    recordType = StressRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end)
-                )
-            ).records
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to read stress", e)
-            emptyList()
-        }
-    }
-
-    /** Read sleep sessions for a date range. */
     suspend fun readSleep(start: Instant, end: Instant): List<SleepSessionRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -181,12 +145,10 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read sleep", e)
             emptyList()
         }
     }
 
-    /** Read exercise sessions. */
     suspend fun readExercise(start: Instant, end: Instant): List<ExerciseSessionRecord> {
         val client = healthClient ?: return emptyList()
         return try {
@@ -197,7 +159,6 @@ class HealthConnectManager(private val context: Context) {
                 )
             ).records
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read exercise", e)
             emptyList()
         }
     }
