@@ -8,6 +8,7 @@ import com.hermes.playerbridge.data.entities.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -100,7 +101,8 @@ class SyncWorker(
                 records.add(JSONObject().apply {
                     put("type", "exercise")
                     put("ts", ex.startTime.toEpochMilli() / 1000)
-                    put("duration_min", ex.duration.toMinutes())
+                    val durSec = (ex.endTime.toEpochMilli() - ex.startTime.toEpochMilli()) / 1000
+                    put("duration_min", durSec / 60)
                 })
             }
 
