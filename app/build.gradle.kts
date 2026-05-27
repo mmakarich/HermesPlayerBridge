@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.hermes.playerbridge"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hermes.playerbridge"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
