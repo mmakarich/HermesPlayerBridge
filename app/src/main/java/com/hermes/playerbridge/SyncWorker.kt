@@ -28,7 +28,7 @@ class SyncWorker(
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(intervalMin, TimeUnit.MINUTES)
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(Duration.ofMinutes(intervalMin.toLong()))
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                 .build()
@@ -73,64 +73,25 @@ class SyncWorker(
 
             val records = mutableListOf<JSONObject>()
 
-            // Daily aggregate (steps, distance)
+            // Daily aggregate
             val agg = healthManager.readDailyAggregate(today)
             if (agg != null) {
-                val dailyRecord = JSONObject().apply {
+                records.add(JSONObject().apply {
                     put("type", "daily")
                     put("date", today.toString())
-                }
-                records.add(dailyRecord)
-            }
-
-            // HRV
-            for (hrv in healthManager.readHrv(startInstant, endInstant)) {
-                records.add(JSONObject().apply {
-                    put("type", "hrv")
-                    put("ts", hrv.time.toEpochMilli() / 1000)
-                    put("value", hrv.rmssd)
-                    put("unit", "ms")
                 })
             }
 
-            // SpO2
-            for (spo2 in healthManager.readSpo2(startInstant, endInstant)) {
-                records.add(JSONObject().apply {
-                    put("type", "spo2")
-                    put("ts", spo2.time.toEpochMilli() / 1000)
-                    put("value", spo2.percentage?.times(100) ?: 0)
-                    put("unit", "%")
-                })
-            }
-
-            // Weight
-            for (w in healthManager.readWeight(startInstant, endInstant)) {
-                records.add(JSONObject().apply {
-                    put("type", "weight")
-                    put("ts", w.time.toEpochMilli() / 1000)
-                    put("value", w.weight?.inKilograms ?: 0.0)
-                    put("unit", "kg")
-                })
-            }
-
-            // Body fat
-            for (bf in healthManager.readBodyFat(startInstant, endInstant)) {
-                records.add(JSONObject().apply {
-                    put("type", "body_fat")
-                    put("ts", bf.time.toEpochMilli() / 1000)
-                    put("value", bf.percentage ?: 0.0)
-                    put("unit", "%")
-                })
-            }
-
-            // Sleep
-            for (sl in healthManager.readSleep(startInstant, endInstant)) {
+            // Sleep (using start/end times only, no duration property issues)
+            val sleepRecords = healthManager.readSleep(startInstant, endInstant)
+            for (sl in sleepRecords) {
+                val durSec = (sl.endTime.toEpochMilli() - sl.startTime.toEpochMilli()) / 1000
                 records.add(JSONObject().apply {
                     put("type", "sleep")
                     put("date", today.toString())
                     put("bedtime_ts", sl.startTime.toEpochMilli() / 1000)
                     put("wake_ts", sl.endTime.toEpochMilli() / 1000)
-                    put("duration_min", sl.duration.toMinutes())
+                    put("duration_min", durSec / 60)
                 })
             }
 
