@@ -34,19 +34,38 @@ jobs:
       - name: Build release APK
         run: gradle assembleRelease
 
-      - name: Sign with debug key
+      - name: Create debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -alias debug \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Hermes, OU=Player, O=Hermes, L=Unknown, ST=Unknown, C=PL"
-          jarsigner -keystore debug.keystore -storepass android -keypass android \
-            app/build/outputs/apk/release/app-release-unsigned.apk debug
 
-      - name: Align APK
+      - name: Align + sign APK (apksigner v1+v2+v3)
         run: |
+          # zipalign FIRST, then sign with apksigner (which supports v2+v3)
           $ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign -f -v 4 \
             app/build/outputs/apk/release/app-release-unsigned.apk \
+            app/build/outputs/apk/release/app-release-aligned.apk
+          $ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner sign \
+            --ks debug.keystore \
+            --ks-pass pass:android \
+            --ks-key-alias debug \
+            --key-pass pass:android \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --min-sdk-version 28 \
+            app/build/outputs/apk/release/app-release-aligned.apk
+
+      - name: Copy final APK
+        run: |
+          cp app/build/outputs/apk/release/app-release-aligned.apk \
+             app/build/outputs/apk/release/HermesPlayerBridge.apk
+
+      - name: Verify APK signature
+        run: |
+          $ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner verify --verbose \
             app/build/outputs/apk/release/HermesPlayerBridge.apk
 
       - name: Upload APK
