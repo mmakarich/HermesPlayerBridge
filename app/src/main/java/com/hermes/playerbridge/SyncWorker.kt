@@ -210,7 +210,7 @@ class SyncWorker(
 
             val result = apiClient.postBatch(
                 webhookUrl = settings.webhookUrl,
-                secret=***                deviceId = settings.deviceId,
+                secret = settings.secretToken,                deviceId = settings.deviceId,
                 records = records,
             )
 
