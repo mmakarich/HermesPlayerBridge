@@ -60,11 +60,7 @@ class HealthConnectManager(private val context: Context) {
         val request = AggregateRequest(
             metrics = setOf(
                 StepsRecord.COUNT_TOTAL,
-                TotalCaloriesBurnedRecord.CALORIES_TOTAL,
                 DistanceRecord.DISTANCE_TOTAL,
-                HeartRateRecord.HEART_RATE_AVG,
-                HeartRateRecord.HEART_RATE_MIN,
-                HeartRateRecord.HEART_RATE_MAX,
             ),
             timeRangeFilter = TimeRangeFilter.between(start, end)
         )

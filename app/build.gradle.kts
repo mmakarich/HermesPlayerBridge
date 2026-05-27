@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.health.connect.client)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     kapt(libs.androidx.room.compiler)
 
     debugImplementation(libs.androidx.ui.tooling)

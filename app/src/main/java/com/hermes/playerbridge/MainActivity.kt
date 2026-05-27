@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
-import androidx.health.connect.client.permission.HealthPermission
 import androidx.lifecycle.lifecycleScope
 import com.hermes.playerbridge.data.AppDatabase
 import com.hermes.playerbridge.data.entities.SyncLogEntity
@@ -28,7 +27,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settings: SettingsManager
     private lateinit var db: AppDatabase
 
-    private var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Set<HealthPermission>>? = null
+    private var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null
 
     private val _isSyncing = MutableStateFlow(false)
     private val _logEntries = MutableStateFlow<List<SyncLogEntity>>(emptyList())
@@ -46,10 +45,12 @@ class MainActivity : ComponentActivity() {
         // Register Health Connect permission launcher
         try {
             permissionLauncher = registerForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { granted ->
-                _permissionsGranted.value = granted.all { it.value }
-                Log.i(TAG, "Permissions: $granted")
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == RESULT_OK) {
+                    _permissionsGranted.value = true
+                }
+                Log.i(TAG, "Permissions result: ${result.resultCode}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register permission launcher", e)
