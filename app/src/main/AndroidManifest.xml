@@ -36,7 +36,6 @@
     <application
         android:name="android.app.Application"
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
         android:label="Hermes Player"
         android:supportsRtl="true"
         android:theme="@style/Theme.HermesPlayerBridge">
