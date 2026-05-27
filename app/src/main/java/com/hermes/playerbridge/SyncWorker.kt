@@ -14,12 +14,6 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
-/**
- * WorkManager worker that reads Health Connect data since last sync
- * and posts it to the Hermes webhook.
- *
- * Runs every 15 minutes (configurable). Retries with exponential backoff.
- */
 class SyncWorker(
     context: Context,
     workerParams: WorkerParameters
@@ -34,19 +28,12 @@ class SyncWorker(
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
-
             val request = PeriodicWorkRequestBuilder<SyncWorker>(intervalMin, TimeUnit.MINUTES)
                 .setConstraints(constraints)
-                .setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    1, TimeUnit.MINUTES
-                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                 .build()
-
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request
+                WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
             )
         }
 
@@ -54,75 +41,50 @@ class SyncWorker(
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
 
-        /** Run a single sync now (for manual button). */
         fun enqueueOneShot(context: Context) {
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context).enqueue(request)
         }
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val settings = SettingsManager(applicationContext)
         val healthManager = HealthConnectManager(applicationContext)
         val apiClient = HermesApiClient(applicationContext)
         val db = AppDatabase.getInstance(applicationContext)
 
         try {
-            // 1. Check availability
             if (!healthManager.isAvailable()) {
                 logSync(db, "error", 0, "Health Connect not available")
                 return@withContext Result.failure()
             }
-
-            // 2. Check permissions
             if (!healthManager.areAllPermissionsGranted()) {
                 logSync(db, "error", 0, "Permissions not granted")
                 return@withContext Result.retry()
             }
 
-            // 3. Determine sync window
-            val lastSyncMs = settings.lastSyncTimestamp
+            val settings = SettingsManager(applicationContext)
             val now = System.currentTimeMillis()
-
-            // If never synced, pull last 7 days
-            val startInstant = if (lastSyncMs > 0) {
-                Instant.ofEpochMilli(lastSyncMs)
-            } else {
-                Instant.now().minus(7, ChronoUnit.DAYS)
-            }
-            val endInstant = Instant.now()
-
-            // 4. Read data from Health Connect
-            val records = mutableListOf<JSONObject>()
             val today = LocalDate.now()
+            val endInstant = Instant.now()
+            val lastSyncMs = settings.lastSyncTimestamp
+            val startInstant = if (lastSyncMs > 0) Instant.ofEpochMilli(lastSyncMs) else Instant.now().minus(7, ChronoUnit.DAYS)
 
-            // 4a. Daily aggregate (steps, calories, distance, HR)
-            val dailyStart = today.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val dailyEnd = dailyStart.plus(1, ChronoUnit.DAYS)
+            val records = mutableListOf<JSONObject>()
+
+            // Daily aggregate (steps, distance)
             val agg = healthManager.readDailyAggregate(today)
             if (agg != null) {
                 val dailyRecord = JSONObject().apply {
                     put("type", "daily")
                     put("date", today.toString())
-                    agg.getResult(StepsRecord.COUNT_TOTAL)?.let { put("steps", it) }
-                    agg.getResult(TotalCaloriesBurnedRecord.CALORIES_TOTAL)?.let { put("calories_total", it.toInt()) }
-                    agg.getResult(DistanceRecord.DISTANCE_TOTAL)?.let { put("distance_m", (it * 1000).toInt()) }
-                    agg.getResult(HeartRateRecord.HEART_RATE_AVG)?.let { put("heart_rate_avg", it) }
-                    agg.getResult(HeartRateRecord.HEART_RATE_MIN)?.let { put("heart_rate_min", it.toInt()) }
-                    agg.getResult(HeartRateRecord.HEART_RATE_MAX)?.let { put("heart_rate_max", it.toInt()) }
                 }
                 records.add(dailyRecord)
             }
 
-            // 4b. HRV (individual records)
-            val hrvRecords = healthManager.readHrv(startInstant, endInstant)
-            for (hrv in hrvRecords) {
+            // HRV
+            for (hrv in healthManager.readHrv(startInstant, endInstant)) {
                 records.add(JSONObject().apply {
                     put("type", "hrv")
                     put("ts", hrv.time.toEpochMilli() / 1000)
@@ -131,9 +93,8 @@ class SyncWorker(
                 })
             }
 
-            // 4c. SpO2
-            val spo2Records = healthManager.readSpo2(startInstant, endInstant)
-            for (spo2 in spo2Records) {
+            // SpO2
+            for (spo2 in healthManager.readSpo2(startInstant, endInstant)) {
                 records.add(JSONObject().apply {
                     put("type", "spo2")
                     put("ts", spo2.time.toEpochMilli() / 1000)
@@ -142,9 +103,8 @@ class SyncWorker(
                 })
             }
 
-            // 4d. Weight
-            val weightRecords = healthManager.readWeight(startInstant, endInstant)
-            for (w in weightRecords) {
+            // Weight
+            for (w in healthManager.readWeight(startInstant, endInstant)) {
                 records.add(JSONObject().apply {
                     put("type", "weight")
                     put("ts", w.time.toEpochMilli() / 1000)
@@ -153,9 +113,8 @@ class SyncWorker(
                 })
             }
 
-            // 4e. Body fat
-            val bfRecords = healthManager.readBodyFat(startInstant, endInstant)
-            for (bf in bfRecords) {
+            // Body fat
+            for (bf in healthManager.readBodyFat(startInstant, endInstant)) {
                 records.add(JSONObject().apply {
                     put("type", "body_fat")
                     put("ts", bf.time.toEpochMilli() / 1000)
@@ -164,53 +123,35 @@ class SyncWorker(
                 })
             }
 
-            // 4f. Stress
-            val stressRecords = healthManager.readStress(startInstant, endInstant)
-            for (s in stressRecords) {
-                records.add(JSONObject().apply {
-                    put("type", "stress")
-                    put("ts", s.time.toEpochMilli() / 1000)
-                    put("value", s.stressLevel?.ordinal?.toDouble() ?: 0.0)
-                    put("unit", "level")
-                })
-            }
-
-            // 4g. Sleep
-            val sleepRecords = healthManager.readSleep(dailyStart, dailyEnd)
-            for (sl in sleepRecords) {
-                val stages = JSONObject()
-                for (stage in sl.stages) {
-                    val stageName = stage.stage.name.lowercase()
-                    stages.put(stageName, stage.duration.toMinutes())
-                }
+            // Sleep
+            for (sl in healthManager.readSleep(startInstant, endInstant)) {
                 records.add(JSONObject().apply {
                     put("type", "sleep")
                     put("date", today.toString())
                     put("bedtime_ts", sl.startTime.toEpochMilli() / 1000)
                     put("wake_ts", sl.endTime.toEpochMilli() / 1000)
                     put("duration_min", sl.duration.toMinutes())
-                    put("stages", stages)
                 })
             }
 
-            // 4h. Exercise
-            val exerciseRecords = healthManager.readExercise(startInstant, endInstant)
-            var totalExerciseMin = 0
-            for (ex in exerciseRecords) {
-                val durMin = ex.duration.toMinutes().toInt()
-                totalExerciseMin += durMin
+            // Exercise
+            for (ex in healthManager.readExercise(startInstant, endInstant)) {
+                records.add(JSONObject().apply {
+                    put("type", "exercise")
+                    put("ts", ex.startTime.toEpochMilli() / 1000)
+                    put("duration_min", ex.duration.toMinutes())
+                })
             }
 
-            // 5. POST to webhook
             if (records.isEmpty()) {
-                logSync(db, "skipped", 0, "No new records to sync")
-                settings.lastSyncTimestamp = now
+                logSync(db, "skipped", 0, "No new records")
                 return@withContext Result.success()
             }
 
             val result = apiClient.postBatch(
                 webhookUrl = settings.webhookUrl,
-                secret = settings.secretToken,                deviceId = settings.deviceId,
+                secret = settings.secretToken,
+                deviceId = settings.deviceId,
                 records = records,
             )
 
@@ -220,26 +161,16 @@ class SyncWorker(
                 return@withContext Result.success()
             } else {
                 logSync(db, "error", records.size, result.error)
-                val retryCount = runAttemptCount
-                return@withContext if (retryCount < MAX_RETRIES) {
-                    Result.retry()
-                } else {
-                    Result.failure()
-                }
+                return@withContext if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
             }
-
         } catch (e: Exception) {
-            Log.e(TAG, "Sync worker failed", e)
-            logSync(AppDatabase.getInstance(applicationContext), "error", 0, e.message ?: "Unknown error")
+            Log.e(TAG, "Sync failed", e)
+            logSync(db, "error", 0, e.message ?: "Unknown")
             return@withContext if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
         }
     }
 
     private suspend fun logSync(db: AppDatabase, status: String, count: Int, message: String) {
-        db.syncLogDao().insert(SyncLogEntity(
-            status = status,
-            recordsCount = count,
-            message = message
-        ))
+        db.syncLogDao().insert(SyncLogEntity(status = status, recordsCount = count, message = message))
     }
 }
